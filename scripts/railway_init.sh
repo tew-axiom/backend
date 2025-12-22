@@ -59,3 +59,30 @@ cd /app && alembic upgrade head
 echo "✅ Railway 初始化完成！"
 echo "🚀 准备启动应用..."
 echo ""
+
+# 测试应用导入
+echo "🧪 测试应用导入..."
+python -c "
+import sys
+sys.path.insert(0, '/app')
+try:
+    from app.main import app
+    print('✅ 应用导入成功')
+    print(f'   应用标题: {app.title}')
+    print(f'   路由数量: {len(app.routes)}')
+except Exception as e:
+    print(f'❌ 应用导入失败: {e}')
+    import traceback
+    traceback.print_exc()
+    exit(1)
+"
+
+echo ""
+echo "🚀 启动 Uvicorn..."
+echo "   命令: uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+echo "   端口: ${PORT:-8000}"
+echo ""
+
+# 使用 exec 替换当前进程，确保 uvicorn 成为主进程
+exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
+
