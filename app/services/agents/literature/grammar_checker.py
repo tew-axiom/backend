@@ -173,8 +173,13 @@ class GrammarCheckerAgent(BaseAgent):
                     "by_type": {}
                 }
 
-            # 确保每个错误都有必需字段
-            for error in result["errors"]:
+            # 确保每个错误都有必需字段，并生成唯一ID
+            import uuid
+            for i, error in enumerate(result["errors"]):
+                # 生成唯一ID（如果没有）
+                if "id" not in error:
+                    error["id"] = f"err_{uuid.uuid4().hex[:8]}_{i}"
+
                 if "type" not in error:
                     error["type"] = "unknown"
                 if "severity" not in error:
