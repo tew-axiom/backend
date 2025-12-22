@@ -58,3 +58,11 @@ cd /app && alembic upgrade head
 
 echo "✅ Railway 初始化完成！"
 echo "🚀 准备启动应用..."
+
+# 运行诊断脚本
+echo ""
+echo "🔍 运行启动诊断..."
+python /app/scripts/diagnose.py
+
+echo ""
+echo "✅ 诊断通过，开始启动应用..."
