@@ -37,6 +37,13 @@ def get_engine() -> AsyncEngine:
     global _engine
 
     if _engine is None:
+        # 确保使用 asyncpg 驱动
+        database_url = settings.database_url
+        if database_url.startswith("postgresql://"):
+            database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+
         # 根据环境选择连接池策略
         if settings.is_development:
             poolclass = NullPool  # 开发环境不使用连接池
@@ -44,7 +51,7 @@ def get_engine() -> AsyncEngine:
             poolclass = AsyncAdaptedQueuePool  # 生产环境使用异步连接池
 
         _engine = create_async_engine(
-            settings.database_url,
+            database_url,
             echo=settings.debug,
             poolclass=poolclass,
             pool_size=settings.database_pool_size,
@@ -53,7 +60,7 @@ def get_engine() -> AsyncEngine:
             pool_recycle=3600,   # 1小时回收连接
         )
 
-        logger.info(f"数据库引擎已创建: {settings.database_url.split('@')[1]}")
+        logger.info(f"数据库引擎已创建: {database_url.split('@')[1] if '@' in database_url else 'local'}")
 
     return _engine
 
