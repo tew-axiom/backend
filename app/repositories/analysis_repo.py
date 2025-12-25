@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
+from sqlalchemy.exc import IntegrityError
 
 from app.database.models import LiteratureAnalysis, MathStep, LogicTreeNode, DebugSession
 from app.core.logging import get_logger
@@ -83,12 +84,34 @@ class AnalysisRepository:
         )
 
         self.db.add(analysis)
-        await self.db.commit()
-        await self.db.refresh(analysis)
 
-        logger.info(f"保存文科分析结果: {analysis.id}, 类型: {analysis_type}")
+        try:
+            await self.db.commit()
+            await self.db.refresh(analysis)
+            logger.info(f"保存文科分析结果: {analysis.id}, 类型: {analysis_type}")
+            return analysis
+        except IntegrityError:
+            # 处理并发插入导致的唯一约束冲突
+            await self.db.rollback()
+            logger.info(f"检测到并发插入冲突，重新获取已存在的分析结果")
 
-        return analysis
+            # 重新查询已存在的记录
+            existing = await self.get_literature_analysis_by_hash(
+                session_id=session_id,
+                analysis_type=analysis_type,
+                content_hash=content_hash
+            )
+
+            if existing:
+                # 更新缓存命中次数
+                existing.cache_hit_count += 1
+                await self.db.commit()
+                await self.db.refresh(existing)
+                logger.info(f"更新分析结果缓存命中次数: {existing.id}")
+                return existing
+            else:
+                # 如果仍然找不到，说明可能是其他问题，重新抛出异常
+                raise
 
     async def get_literature_analysis_by_hash(
         self,
@@ -321,19 +344,33 @@ class AnalysisRepository:
             analysis_objects = []
 
             for analysis_data in analyses:
-                analysis = LiteratureAnalysis(
+                # 先检查是否已存在
+                existing = await self.get_literature_analysis_by_hash(
                     session_id=analysis_data["session_id"],
                     analysis_type=analysis_data["analysis_type"],
-                    content_version=analysis_data["content_version"],
-                    content_hash=analysis_data["content_hash"],
-                    results=analysis_data["results"],
-                    processing_time_ms=analysis_data.get("processing_time_ms"),
-                    tokens_used=analysis_data.get("tokens_used"),
-                    model_used=analysis_data.get("model_used"),
-                    is_cached=False
+                    content_hash=analysis_data["content_hash"]
                 )
-                analysis_objects.append(analysis)
-                self.db.add(analysis)
+
+                if existing:
+                    # 如果已存在，更新缓存命中次数
+                    existing.cache_hit_count += 1
+                    analysis_objects.append(existing)
+                    logger.info(f"批量创建时发现已存在的分析结果: {existing.id}")
+                else:
+                    # 创建新的分析结果
+                    analysis = LiteratureAnalysis(
+                        session_id=analysis_data["session_id"],
+                        analysis_type=analysis_data["analysis_type"],
+                        content_version=analysis_data["content_version"],
+                        content_hash=analysis_data["content_hash"],
+                        results=analysis_data["results"],
+                        processing_time_ms=analysis_data.get("processing_time_ms"),
+                        tokens_used=analysis_data.get("tokens_used"),
+                        model_used=analysis_data.get("model_used"),
+                        is_cached=False
+                    )
+                    analysis_objects.append(analysis)
+                    self.db.add(analysis)
 
             await self.db.commit()
 
@@ -344,6 +381,10 @@ class AnalysisRepository:
 
             return analysis_objects
 
+        except IntegrityError as e:
+            logger.error(f"批量创建文科分析结果时发生唯一约束冲突: {str(e)}")
+            await self.db.rollback()
+            raise
         except Exception as e:
             logger.error(f"批量创建文科分析结果失败: {str(e)}")
             await self.db.rollback()
