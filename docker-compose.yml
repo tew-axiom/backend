@@ -10,7 +10,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://k12user:k12password@postgres:5432/learning_assistant
       - REDIS_URL=redis://redis:6379/0
-      - QWEN_API_KEY=${QWEN_API_KEY:-sk-0342251b27394172a1ccff2879076981}
+      - QWEN_API_KEY=${QWEN_API_KEY}
       - QWEN_TEXT_MODEL=qwen3-max
       - QWEN_OCR_MODEL=qwen-vl-max
       - QWEN_EMBEDDING_MODEL=text-embedding-v3
